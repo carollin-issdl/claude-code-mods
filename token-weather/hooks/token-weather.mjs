@@ -36,13 +36,36 @@ const FORECAST = [
 let readings = [];
 // Latest plan rate limits: list of { kind, percentUsed, resetsAt }.
 let rateLimits = [];
+// Latest cost figure from $.session.usage(), if the host reports one.
+let cost = null;
+
+// Id of the side panel this mod opens, used to open/close it and to
+// recognize it in the ui.render hook.
+const PANEL = "token-weather-panel";
 
 export function register(on) {
   on("session.start", async ($, e, next) => {
     const result = await next(e);
     readings = [];
     await takeReading($);
+    // Open our own panel. Opened by the mod itself (not a user action), so
+    // per the mods interface rules it only appears on a wide enough window
+    // the first time; it appears more readily once the user has opened it
+    // themselves once (e.g. via /usage-panel).
+    try {
+      await $.ui.open({ id: PANEL, title: "Token Weather" });
+    } catch {
+      // Ignore: e.g. too narrow this time, or already open.
+    }
+    // Keep the reset countdowns in the panel ticking even between turns.
+    $.clock.every(30_000, () => $.ui.invalidate("ui.render"));
+    await $.command.register({ name: "usage-panel", description: "Open the Token Weather usage panel" });
     return result;
+  });
+
+  on("command.run", { command: "usage-panel" }, async ($) => {
+    await $.ui.open({ id: PANEL, title: "Token Weather", focus: true, closeOnEscape: true });
+    return {};
   });
 
   on("turn.complete", async ($, e, next) => {
@@ -67,13 +90,25 @@ export function register(on) {
     const { Box, Text } = $.ui.resolve(e);
     return band(Box, Text, e.bodyColumns ?? 80);
   });
+
+  on("ui.render", { component: "Pane" }, ($, e, next) => {
+    if (e.requestId !== PANEL) {
+      return next(e);
+    }
+    const { Box, Text } = $.ui.resolve(e);
+    return panel(Box, Text);
+  });
 }
 
 async function takeReading($) {
   try {
-    const { context, rateLimits: limits } = await $.session.usage();
+    const usage = await $.session.usage();
+    const { context, rateLimits: limits } = usage;
     if (Array.isArray(limits)) {
       rateLimits = limits;
+    }
+    if (usage.cost != null) {
+      cost = usage.cost;
     }
     if (!context || !context.window) {
       return;
@@ -88,7 +123,7 @@ async function takeReading($) {
     }
     $.ui.invalidate("ui.render");
   } catch {
-    // No reading this turn; the band keeps the last one.
+    // No reading this turn; the band and panel keep the last one.
   }
 }
 
@@ -131,6 +166,69 @@ function rateLimitParts(Text) {
       children: `  ${label} ${used}%${reset ? ` (${reset})` : ""}`,
     });
   });
+}
+
+// One row per rate limit, full label, percent, reset countdown and a small
+// text progress bar -- more room than the band gets, so nothing is cut.
+function rateLimitRows(Box, Text) {
+  if (!rateLimits.length) {
+    return [Text({ dimColor: true, children: "(no plan limit data yet)" })];
+  }
+  return rateLimits.map((rl, i) => {
+    const used = Math.round(rl.percentUsed ?? 0);
+    const reset = fmtReset(rl.resetsAt);
+    const label = labelFor(rl.kind);
+    const urgent = used >= 90;
+    const filled = Math.round((used / 100) * 10);
+    const bar = "█".repeat(filled) + "░".repeat(10 - filled);
+    return Box({
+      key: "rl-" + i,
+      flexDirection: "row",
+      columnGap: 1,
+      children: [
+        Text({ color: urgent ? "red" : undefined, bold: urgent, children: bar }),
+        Text({ children: `${label} ${used}%` }),
+        reset ? Text({ dimColor: true, children: `resets ${reset}` }) : Text({ children: "" }),
+      ],
+    });
+  });
+}
+
+function panel(Box, Text) {
+  if (readings.length === 0) {
+    return Text({ dimColor: true, children: "Waiting for the first reply…" });
+  }
+  const now = readings[readings.length - 1];
+  const f = forecastFor(now.percent);
+  const trend = trendWord();
+
+  const rows = [
+    Box({
+      flexDirection: "row",
+      columnGap: 1,
+      children: [
+        Text({ color: f.color, bold: true, children: `${f.icon} ${f.word}` }),
+        Text({ children: `${now.percent}% of context` }),
+      ],
+    }),
+    Text({ dimColor: true, children: `${short(now.tokens)} / ${short(now.window)} tokens` }),
+    Text({ color: f.color, children: chart() }),
+  ];
+  if (trend) {
+    rows.push(Text({ dimColor: true, children: trend }));
+  }
+  rows.push(Text({ children: " " }));
+  rows.push(Text({ dimColor: true, children: "Plan limits" }));
+  rows.push(...rateLimitRows(Box, Text));
+  if (cost != null) {
+    const amount = typeof cost === "number" ? cost : cost.totalCostUsd ?? cost.total ?? null;
+    if (amount != null) {
+      rows.push(Text({ children: " " }));
+      rows.push(Text({ dimColor: true, children: `Session cost: $${Number(amount).toFixed(2)}` }));
+    }
+  }
+
+  return Box({ flexDirection: "column", rowGap: 1, children: rows });
 }
 
 function band(Box, Text, columns) {
