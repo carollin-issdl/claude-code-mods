@@ -127,20 +127,22 @@ async function takeReading($) {
   }
 }
 
-// e.g. "five_hour" -> "Session", "seven_day_all_models" -> "Week", "seven_day_opus" -> "Week-Opus"
+// SessionRateLimit.kind is one of exactly three strings per Claude Code's
+// own mods type declarations: "five_hour", "seven_day", or a gateway's
+// "spend_limit". There is no per-model variant exposed to mods (the
+// Desktop app's own "Weekly · Fable" row is drawn from data mods can't see).
 function labelFor(kind) {
-  const k = String(kind || "").toLowerCase();
-  if (k.includes("hour")) return "Session";
-  if (k.includes("week") || k.includes("seven_day")) {
-    const modelMatch = k.match(/seven_day_([a-z0-9]+)/);
-    const model = modelMatch && modelMatch[1] !== "all" && modelMatch[1] !== "models" ? modelMatch[1] : null;
-    return model ? `Week-${model[0].toUpperCase()}${model.slice(1)}` : "Week";
-  }
+  const k = String(kind || "");
+  if (k === "five_hour") return "Session";
+  if (k === "seven_day") return "Week";
+  if (k === "spend_limit") return "Spend";
   return k || "Limit";
 }
 
 function fmtReset(resetsAt) {
   if (!resetsAt) return "";
+  // resetsAt is an ISO 8601 string per SessionRateLimit, but accept a raw
+  // epoch value too in case a future host sends one.
   let ms = typeof resetsAt === "number" ? (resetsAt < 1e12 ? resetsAt * 1000 : resetsAt) : Date.parse(resetsAt);
   if (!Number.isFinite(ms)) return "";
   const diff = ms - Date.now();
@@ -220,12 +222,12 @@ function panel(Box, Text) {
   rows.push(Text({ children: " " }));
   rows.push(Text({ dimColor: true, children: "Plan limits" }));
   rows.push(...rateLimitRows(Box, Text));
-  if (cost != null) {
-    const amount = typeof cost === "number" ? cost : cost.totalCostUsd ?? cost.total ?? null;
-    if (amount != null) {
-      rows.push(Text({ children: " " }));
-      rows.push(Text({ dimColor: true, children: `Session cost: $${Number(amount).toFixed(2)}` }));
-    }
+  // SessionCost is exactly { usd: number } per Claude Code's own mods
+  // types -- no per-model split, cache-hit rate, or API time is exposed
+  // to mods, so this is the only cost figure this panel can show.
+  if (cost != null && Number.isFinite(cost.usd)) {
+    rows.push(Text({ children: " " }));
+    rows.push(Text({ dimColor: true, children: `Session cost: $${cost.usd.toFixed(2)}` }));
   }
 
   return Box({ flexDirection: "column", rowGap: 1, children: rows });

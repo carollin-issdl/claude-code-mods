@@ -1,6 +1,6 @@
 {
   "name": "token-weather",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A live forecast of the context window, drawn above the prompt: a weather icon, the fill percentage, and a chart of the last turns. Locally extended with a side panel (/usage-panel) showing full plan rate-limit and cost details.",
   "author": {
     "name": "Claude Code DevRel"
