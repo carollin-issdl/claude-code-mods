@@ -139,21 +139,25 @@ function band(Box, Text, columns) {
   const now = readings[readings.length - 1];
   const f = forecastFor(now.percent);
   const trend = trendWord();
+  // Plan limits are the figure asked for most, so they go right after the
+  // headline numbers -- before the chart/trend, which are nice-to-haves and
+  // are the first thing dropped on a narrower band.
   const parts = [
     Text({ color: f.color, bold: true, children: `${f.icon}  ${f.word}` }),
     Text({ children: `  ${now.percent}% of context` }),
     Text({ dimColor: true, children: `  ${short(now.tokens)} / ${short(now.window)}` }),
   ];
-  if (columns >= 60) {
+  const limitParts = rateLimitParts(Text);
+  if (limitParts.length) {
+    parts.push(Text({ dimColor: true, children: "  │" }));
+    parts.push(...limitParts);
+  }
+  if (columns >= 90) {
     parts.push(Text({ dimColor: true, children: "   last turns " }));
     parts.push(Text({ color: f.color, children: chart() }));
     if (trend) {
       parts.push(Text({ dimColor: true, children: `  ${trend}` }));
     }
-  }
-  if (columns >= 90) {
-    parts.push(Text({ dimColor: true, children: "  │" }));
-    parts.push(...rateLimitParts(Text));
   }
   return Box({ flexDirection: "row", paddingX: 1, children: parts });
 }
