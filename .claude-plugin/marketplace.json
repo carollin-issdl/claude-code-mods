@@ -1,0 +1,16 @@
+{
+  "name": "carol-local-mods",
+  "owner": {
+    "name": "Carol Lin"
+  },
+  "metadata": {
+    "description": "Local-only marketplace mirroring the token-weather sample mod from Anthropic's claude-code-playground."
+  },
+  "plugins": [
+    {
+      "name": "token-weather",
+      "source": "./token-weather",
+      "description": "A live forecast of the context window, drawn above the prompt."
+    }
+  ]
+}
