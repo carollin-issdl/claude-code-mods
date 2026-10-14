@@ -1,7 +1,7 @@
 {
   "name": "token-weather",
-  "version": "0.1.4",
-  "description": "A live forecast of the context window, drawn above the prompt: a weather icon, the fill percentage, and a chart of the last turns.",
+  "version": "0.1.5",
+  "description": "A live forecast of the context window, drawn above the prompt: a weather icon, the fill percentage, a chart of the last turns, and (on wide terminals) Session/Week plan limits with reset countdowns.",
   "author": {
     "name": "Claude Code DevRel"
   }
